@@ -1,14 +1,15 @@
 import { createEffect, createMemo, createSignal, getOwner, onCleanup } from "solid-js";
 import { createStore } from "solid-js/store";
 import { isServer } from "solid-js/web";
+import { entries, getEmptyMatchesFromBreakpoints } from "./common";
 import { Breakpoints, BreakpointOptions, MqlInstances, Matches } from "./types";
 
 /**
  * Creates a very simple and straightforward media query monitor.
  *
- * @param callback Media query to listen for
- * @param boolean Sets the initial state to begin with
- * @param boolean If true watches changes and reports state reactively
+ * @param query Media query to listen for
+ * @param fallbackState Sets the initial state to begin with
+ * @param watchChange If true watches changes and reports state reactively
  * @returns Boolean value if media query is met or not
  *
  * @example
@@ -75,10 +76,10 @@ function createBreakpoints<T extends Breakpoints>(
   const isMqSupported = checkMqSupported();
 
   const mqlInstances = createMemo(() => {
-    const mqlInstances: MqlInstances<T> = {};
+    const mqlInstances = {} as MqlInstances<T>;
 
     if (isMqSupported) {
-      Object.entries(breakpoints).forEach(([token, width]) => {
+      entries(breakpoints).forEach(([token, width]) => {
         const responsiveProperty = options.responsiveMode === "desktop-first" ? "max" : "min";
         const mediaquery = `(${responsiveProperty}-width: ${width})`;
         const instance = window.matchMedia(mediaquery);
@@ -90,21 +91,24 @@ function createBreakpoints<T extends Breakpoints>(
     return mqlInstances;
   });
 
-  function getInitialMatches() {
+  function getInitialMatches(): Matches<T> {
     if (!isMqSupported) {
-      return options.fallbackMatch || {};
+      return options.fallbackMatch || getEmptyMatchesFromBreakpoints(breakpoints);
     }
 
-    const matches: Matches<T> = {};
+    const matches = {} as Record<keyof T, boolean>;
 
-    Object.entries(mqlInstances()).forEach(([token, mql]) => {
+    entries(mqlInstances()).forEach(([token, mql]) => {
       matches[token] = mql.matches;
     });
 
     return matches;
   }
 
-  const [matches, setMatches] = createStore(getInitialMatches());
+  // TODO: switch to createStaticStore once available to clear types
+  const [matches, setMatches] = createStore<Record<keyof T, boolean>>(
+    getInitialMatches()
+  ) as unknown as [Matches<T>, (token: keyof T, match: boolean) => void];
 
   createEffect(() => {
     const shouldWatch = options.watchChange ?? true;
@@ -112,7 +116,7 @@ function createBreakpoints<T extends Breakpoints>(
       return;
     }
 
-    Object.entries(mqlInstances()).forEach(([token, mql]) => {
+    entries(mqlInstances()).forEach(([token, mql]) => {
       const listener = (event: MediaQueryListEvent) => {
         setMatches(token, event.matches);
       };
@@ -129,4 +133,4 @@ function createBreakpoints<T extends Breakpoints>(
 
 export default createMediaQuery;
 export { createBreakpoints };
-export * from './types';
+export * from "./types";
